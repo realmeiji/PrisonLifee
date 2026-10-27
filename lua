@@ -2188,42 +2188,34 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
     local Arguments = {...}
     local self = Arguments[1]
-    local chance = CalculateChance(SilentAimSettings.HitChance)
-    if SilentAimSettings.Enabled and self == workspace and not checkcaller() and chance == true then
-        if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
-                local A_Ray = Arguments[2]
-                local HitPart = getClosestPlayer()
-                if HitPart then
-                    Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
-                end
-            end
-        elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
-                local A_Ray = Arguments[2]
-                local HitPart = getClosestPlayer()
-                if HitPart then
-                    Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
-                end
-            end
-        elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
-            if ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
-                local A_Ray = Arguments[2]
-                local HitPart = getClosestPlayer()
-                if HitPart then
-                    Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
-                    return oldNamecall(unpack(Arguments))
-                end
-            end
-        elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
-            if ValidateArguments(Arguments, ExpectedArguments.Raycast) then
-                local A_Origin = Arguments[2]
-                local HitPart = getClosestPlayer()
-                if HitPart then
-                    Arguments[3] = getDirection(A_Origin, HitPart.Position)
-                    return oldNamecall(unpack(Arguments))
+    if SilentAimSettings.Enabled and self == workspace and not checkcaller() then
+        local ok, HitPart = pcall(getClosestPlayer)
+        if ok and HitPart and HitPart.Position then
+            if CalculateChance(SilentAimSettings.HitChance) then
+                if Method == "FindPartOnRayWithIgnoreList" and SilentAimSettings.SilentAimMethod == Method then
+                    local A_Ray = Arguments[2]
+                    if typeof(A_Ray) == "Ray" and ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithIgnoreList) then
+                        Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
+                        return oldNamecall(unpack(Arguments))
+                    end
+                elseif Method == "FindPartOnRayWithWhitelist" and SilentAimSettings.SilentAimMethod == Method then
+                    local A_Ray = Arguments[2]
+                    if typeof(A_Ray) == "Ray" and ValidateArguments(Arguments, ExpectedArguments.FindPartOnRayWithWhitelist) then
+                        Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
+                        return oldNamecall(unpack(Arguments))
+                    end
+                elseif (Method == "FindPartOnRay" or Method == "findPartOnRay") and SilentAimSettings.SilentAimMethod:lower() == Method:lower() then
+                    local A_Ray = Arguments[2]
+                    if typeof(A_Ray) == "Ray" and ValidateArguments(Arguments, ExpectedArguments.FindPartOnRay) then
+                        Arguments[2] = Ray.new(A_Ray.Origin, getDirection(A_Ray.Origin, HitPart.Position))
+                        return oldNamecall(unpack(Arguments))
+                    end
+                elseif Method == "Raycast" and SilentAimSettings.SilentAimMethod == Method then
+                    local A_Origin = Arguments[2]
+                    if typeof(A_Origin) == "Vector3" and ValidateArguments(Arguments, ExpectedArguments.Raycast) then
+                        Arguments[3] = getDirection(A_Origin, HitPart.Position)
+                        return oldNamecall(unpack(Arguments))
+                    end
                 end
             end
         end
@@ -2233,18 +2225,28 @@ end))
 
 local oldIndex = nil
 oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
-    if self == Mouse and not checkcaller() and SilentAimSettings.Enabled and SilentAimSettings.SilentAimMethod == "Mouse.Hit/Target" and getClosestPlayer() then
-        local HitPart = getClosestPlayer()
-        if Index == "Target" or Index == "target" then
-            return HitPart
-        elseif Index == "Hit" or Index == "hit" then
-            return ((SilentAimSettings.MouseHitPrediction and (HitPart.CFrame + (HitPart.Velocity * PredictionAmount))) or (not SilentAimSettings.MouseHitPrediction and HitPart.CFrame))
-        elseif Index == "X" or Index == "x" then
-            return self.X
-        elseif Index == "Y" or Index == "y" then
-            return self.Y
-        elseif Index == "UnitRay" then
-            return Ray.new(self.Origin, (self.Hit - self.Origin).Unit)
+    if self == Mouse and not checkcaller() and SilentAimSettings.Enabled and SilentAimSettings.SilentAimMethod == "Mouse.Hit/Target" then
+        local ok, HitPart = pcall(getClosestPlayer)
+        if ok and HitPart and HitPart.Position then
+            if Index == "Target" or Index == "target" then
+                return HitPart
+            elseif Index == "Hit" or Index == "hit" then
+                if SilentAimSettings.MouseHitPrediction then
+                    local vel = HitPart.AssemblyLinearVelocity or HitPart.Velocity
+                    return HitPart.CFrame + (vel * PredictionAmount)
+                end
+                return HitPart.CFrame
+            elseif Index == "X" or Index == "x" then
+                return self.X
+            elseif Index == "Y" or Index == "y" then
+                return self.Y
+            elseif Index == "UnitRay" then
+                local origin = self.Origin
+                local hit = self.Hit
+                if typeof(origin) == "Vector3" and typeof(hit) == "CFrame" then
+                    return Ray.new(origin, (hit.Position - origin).Unit)
+                end
+            end
         end
     end
     return oldIndex(self, Index)
